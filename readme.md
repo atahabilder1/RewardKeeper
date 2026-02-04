@@ -8,7 +8,7 @@
 
 ## Background
 
-[**Prizeversity**](https://prizeversity.com) is a gamification-of-learning platform used in CSC1100 (Computer Science I) at Wayne State University, designed by **Professor Hadi Nassar**. Students earn "Bit" points for their lab performance — completing Debug Dungeon challenges, submitting early, and maintaining streaks of perfect scores. These Bit points can be redeemed in the **Bit Bazaar** for items such as extra credit, lab attendance passes, and more.
+[**Prizeversity**](https://prizeversity.com) is a gamification-of-learning platform used in CSC1100 (Computer Science I) at Wayne State University, designed by **Professor Hadi Nasser**. Students earn "Bit" points for their lab performance — completing Debug Dungeon challenges, submitting early, and maintaining streaks of perfect scores. These Bit points can be redeemed in the **Bit Bazaar** for items such as extra credit, lab attendance passes, and more.
 
 As a lab instructor for CSC1100, I built **RewardKeeper** to automate the reward calculation process. Professor Nassar provided the reward structure and rules; this tool implements them so that lab instructors can compute rewards by uploading gradesheet CSVs each week instead of manually tallying points.
 
