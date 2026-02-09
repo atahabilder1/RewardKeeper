@@ -1,9 +1,7 @@
-const TOTAL_WEEKS = 14;
-
-export default function StreakTable({ streakData, week }) {
+export default function StreakTable({ streakData, week, totalWeeks = 12 }) {
   if (!streakData || streakData.history.length === 0) return null;
 
-  const weeks = Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1);
+  const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
   const minWeeks = streakData.min_weeks;
 
   // Check last N weeks (up to 4) for streak coloring

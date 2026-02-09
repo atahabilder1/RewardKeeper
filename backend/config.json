@@ -1,0 +1,28 @@
+{
+  "allowed_crns": [
+    {
+      "crn": 23439,
+      "subject": "CSC",
+      "course": "1100",
+      "title": "Problem Solving and Programming",
+      "ta_name": "Anik",
+      "class_start_time": "02:30:00 PM"
+    },
+    {
+      "crn": 23440,
+      "subject": "CSC",
+      "course": "1100",
+      "title": "Problem Solving and Programming",
+      "ta_name": "",
+      "class_start_time": "02:30:00 PM"
+    },
+    {
+      "crn": 23441,
+      "subject": "CSC",
+      "course": "1100",
+      "title": "Problem Solving and Programming",
+      "ta_name": "",
+      "class_start_time": "02:30:00 PM"
+    }
+  ]
+}

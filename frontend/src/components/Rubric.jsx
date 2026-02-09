@@ -1,4 +1,50 @@
-export default function Rubric() {
+export default function Rubric({ rewardGroups, onGroupsChange, totalWeeks }) {
+  const handleStartChange = (i, value) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 1) return;
+    const updated = [...rewardGroups];
+    updated[i] = { ...updated[i], start: Math.min(num, updated[i].end) };
+    onGroupsChange(updated);
+  };
+
+  const handleEndChange = (i, value) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 1) return;
+    const updated = [...rewardGroups];
+    updated[i] = { ...updated[i], end: Math.max(num, updated[i].start) };
+    onGroupsChange(updated);
+  };
+
+  const handleRewardChange = (i, value) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 0) return;
+    const updated = [...rewardGroups];
+    updated[i] = { ...updated[i], reward: num };
+    onGroupsChange(updated);
+  };
+
+  const addGroup = () => {
+    const last = rewardGroups[rewardGroups.length - 1];
+    const newStart = last.end + 1;
+    if (newStart > totalWeeks) return;
+    const splitAt = Math.floor((last.start + totalWeeks) / 2);
+    const newEnd = Math.max(last.start, Math.min(splitAt, totalWeeks - 1));
+    const updated = [...rewardGroups];
+    updated[updated.length - 1] = { ...last, end: newEnd };
+    updated.push({ start: newEnd + 1, end: totalWeeks, reward: last.reward + 10 });
+    onGroupsChange(updated);
+  };
+
+  const removeGroup = (i) => {
+    if (rewardGroups.length <= 1) return;
+    const updated = [...rewardGroups];
+    updated.splice(i, 1);
+    onGroupsChange(updated);
+  };
+
+  const lastGroup = rewardGroups[rewardGroups.length - 1];
+  const canAdd = lastGroup.end < totalWeeks;
+
   return (
     <div className="card rubric">
       <h2>Reward Rubric</h2>
@@ -13,17 +59,69 @@ export default function Rubric() {
         <thead>
           <tr>
             <th>Weeks</th>
-            <th>1-4</th>
-            <th>5-8</th>
-            <th>9-12</th>
+            {rewardGroups.map((g, i) => (
+              <th key={i}>
+                <span className="group-header">
+                  <input
+                    className="rubric-end-input"
+                    type="number"
+                    min="1"
+                    value={g.start}
+                    onChange={(e) => handleStartChange(i, e.target.value)}
+                  />
+                  <span className="group-sep">-</span>
+                  <input
+                    className="rubric-end-input"
+                    type="number"
+                    min={g.start}
+                    value={g.end}
+                    onChange={(e) => handleEndChange(i, e.target.value)}
+                  />
+                </span>
+              </th>
+            ))}
+            <th className="group-actions-header">
+              <button
+                type="button"
+                className="group-add-btn"
+                onClick={addGroup}
+                disabled={!canAdd}
+                title="Add group"
+              >+</button>
+            </th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>Bit Reward</strong></td>
-            <td>10</td>
-            <td>20</td>
-            <td>30</td>
+            {rewardGroups.map((g, i) => (
+              <td key={i}>
+                <input
+                  className="rubric-input"
+                  type="number"
+                  min="0"
+                  value={g.reward}
+                  onChange={(e) => handleRewardChange(i, e.target.value)}
+                />
+              </td>
+            ))}
+            <td></td>
+          </tr>
+          <tr>
+            <td></td>
+            {rewardGroups.map((_, i) => (
+              <td key={i}>
+                {rewardGroups.length > 1 && (
+                  <button
+                    type="button"
+                    className="group-remove-btn"
+                    onClick={() => removeGroup(i)}
+                    title="Remove group"
+                  >Remove</button>
+                )}
+              </td>
+            ))}
+            <td></td>
           </tr>
         </tbody>
       </table>

@@ -3,7 +3,7 @@ import { useState } from "react";
 const LOGIN_URL = "http://localhost:8000/api/login";
 
 export default function Login({ onLogin, onCancel }) {
-  const [username, setUsername] = useState("");
+  const [crn, setCrn] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ export default function Login({ onLogin, onCancel }) {
     setLoading(true);
 
     const formData = new FormData();
-    formData.append("username", username);
+    formData.append("crn", crn);
     formData.append("password", password);
 
     try {
@@ -24,7 +24,7 @@ export default function Login({ onLogin, onCancel }) {
         throw new Error(body?.detail || "Invalid credentials");
       }
       const data = await res.json();
-      onLogin(data.ta_name);
+      onLogin(data.ta_name, data.course_info, data.display_name);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -36,15 +36,17 @@ export default function Login({ onLogin, onCancel }) {
     <div className="login-overlay" onClick={onCancel}>
       <div className="login-card" onClick={(e) => e.stopPropagation()}>
         <h2>Login Required</h2>
-        <p>Please log in to continue.</p>
+        <p>Enter your course CRN to continue.</p>
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="crn">Course CRN</label>
             <input
-              id="username"
+              id="crn"
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              inputMode="numeric"
+              value={crn}
+              onChange={(e) => setCrn(e.target.value)}
+              placeholder="e.g. 12345"
               autoFocus
               required
             />
@@ -54,6 +56,7 @@ export default function Login({ onLogin, onCancel }) {
             <input
               id="password"
               type="password"
+              inputMode="numeric"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

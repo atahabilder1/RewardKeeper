@@ -2,17 +2,22 @@ import csv
 import io
 from datetime import datetime
 
-WEEK_REWARDS = {"1-4": 10, "5-8": 20, "9-14": 30}
+DEFAULT_GROUPS = [
+    {"start": 1, "end": 4, "reward": 10},
+    {"start": 5, "end": 8, "reward": 20},
+    {"start": 9, "end": 12, "reward": 30},
+]
 
 
-def get_week_range(week: int) -> str:
-    if 1 <= week <= 4:
-        return "1-4"
-    elif 5 <= week <= 8:
-        return "5-8"
-    elif 9 <= week <= 14:
-        return "9-14"
-    raise ValueError(f"Week must be between 1 and 14, got {week}")
+def get_reward_for_week(week: int, groups: list[dict] | None = None) -> tuple[str, int]:
+    """Return (week_range_label, reward_points) for the given week."""
+    grps = groups if groups else DEFAULT_GROUPS
+    for g in grps:
+        if g["start"] <= week <= g["end"]:
+            return f"{g['start']}-{g['end']}", g["reward"]
+    # Fallback: use the last group if week exceeds all ranges
+    last = grps[-1]
+    return f"{last['start']}-{last['end']}", last["reward"]
 
 
 def parse_gradesheet(file_content: str) -> tuple[dict, int]:
@@ -37,14 +42,13 @@ def parse_gradesheet(file_content: str) -> tuple[dict, int]:
     return students, max_grade
 
 
-def compute_rewards(file1_content: str, file2_content: str, week: int) -> dict:
+def compute_rewards(file1_content: str, file2_content: str, week: int, custom_groups: list[dict] | None = None, class_start_time: str = "02:30:00 PM") -> dict:
     sub1, max_grade1 = parse_gradesheet(file1_content)
     sub2, max_grade2 = parse_gradesheet(file2_content)
 
     full_mark = max(max_grade1, max_grade2)
 
-    week_range = get_week_range(week)
-    reward_points = WEEK_REWARDS[week_range]
+    week_range, reward_points = get_reward_for_week(week, custom_groups)
 
     all_students = set(sub1.keys()) | set(sub2.keys())
 
@@ -64,7 +68,7 @@ def compute_rewards(file1_content: str, file2_content: str, week: int) -> dict:
             s2 = f"{grade2}/{full_mark}" if name in sub2 else "N/A"
             not_passed.append({"name": name, "problem1": s1, "problem2": s2})
 
-    # Reward 2: Early Submission (Top 5) - any full mark in either problem
+    # Reward 2: Early Submission (Top 5) - earliest full-mark submission
     correct_students = []
     for name in all_students:
         g1 = sub1.get(name, {}).get("grade", 0)
@@ -72,30 +76,34 @@ def compute_rewards(file1_content: str, file2_content: str, week: int) -> dict:
         full1 = g1 == full_mark
         full2 = g2 == full_mark
         if full1 or full2:
-            problems = []
-            if full1:
-                problems.append("Problem 1")
-            if full2:
-                problems.append("Problem 2")
-            dates = []
-            if name in sub1:
-                dates.append(sub1[name]["submission_date"])
-            if name in sub2:
-                dates.append(sub2[name]["submission_date"])
-            earliest = min(dates)
-            correct_students.append((name, earliest, ", ".join(problems)))
+            # Find which full-mark problem was submitted earliest
+            candidates = []
+            if full1 and name in sub1:
+                candidates.append(("Problem 1", sub1[name]["submission_date"]))
+            if full2 and name in sub2:
+                candidates.append(("Problem 2", sub2[name]["submission_date"]))
+            earliest_problem, earliest_date = min(candidates, key=lambda x: x[1])
+            correct_students.append((name, earliest_date, earliest_problem))
 
     correct_students.sort(key=lambda x: x[1])
 
-    top5 = [
-        {
+    # Parse class start time to calculate duration
+    # class_start_time is like "02:30:00 PM"
+    start_time = datetime.strptime(class_start_time, "%I:%M:%S %p")
+
+    top5 = []
+    for i, (name, date, problems) in enumerate(correct_students[:5], 1):
+        # Build a start datetime on the same date as submission
+        start_dt = date.replace(hour=start_time.hour, minute=start_time.minute, second=start_time.second)
+        diff = date - start_dt
+        minutes_taken = max(0, diff.total_seconds() / 60)
+        top5.append({
             "rank": i,
             "name": name,
             "submission_time": date.strftime("%m/%d/%Y, %I:%M:%S %p"),
             "problems": problems,
-        }
-        for i, (name, date, problems) in enumerate(correct_students[:5], 1)
-    ]
+            "time_taken": round(minutes_taken, 1),
+        })
 
     return {
         "dungeon_week": week,

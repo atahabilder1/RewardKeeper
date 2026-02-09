@@ -30,6 +30,39 @@ def init_db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS week_meta (
+            ta_name TEXT NOT NULL,
+            week INTEGER NOT NULL,
+            week_range TEXT NOT NULL,
+            reward_points INTEGER NOT NULL,
+            total_eligible INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (ta_name, week)
+        )
+        """
+    )
+    # Migrate early_submissions if missing time_taken column
+    cursor = conn.execute("PRAGMA table_info(early_submissions)")
+    es_columns = [row[1] for row in cursor.fetchall()]
+    if es_columns and "time_taken" not in es_columns:
+        conn.execute("DROP TABLE early_submissions")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS early_submissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ta_name TEXT NOT NULL,
+            week INTEGER NOT NULL,
+            rank INTEGER NOT NULL,
+            student_name TEXT NOT NULL,
+            problem TEXT NOT NULL,
+            submission_time TEXT NOT NULL,
+            time_taken REAL NOT NULL DEFAULT 0,
+            UNIQUE(ta_name, week, rank)
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -60,6 +93,68 @@ def save_week_results(ta_name, week, students_data):
         )
     conn.commit()
     conn.close()
+
+
+def save_week_meta(ta_name, week, week_range, reward_points, total_eligible):
+    """Save metadata for a week computation."""
+    conn = _get_conn()
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO week_meta (ta_name, week, week_range, reward_points, total_eligible)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (ta_name, week, week_range, reward_points, total_eligible),
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_early_submissions(ta_name, week, top5):
+    """Save the early submission top 5 for a week.
+
+    top5: list of dicts with rank, name, problems, submission_time
+    """
+    conn = _get_conn()
+    # Clear old data for this week first
+    conn.execute(
+        "DELETE FROM early_submissions WHERE ta_name = ? AND week = ?",
+        (ta_name, week),
+    )
+    for s in top5:
+        conn.execute(
+            """
+            INSERT INTO early_submissions (ta_name, week, rank, student_name, problem, submission_time, time_taken)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (ta_name, week, s["rank"], s["name"], s["problems"], s["submission_time"], s.get("time_taken", 0)),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_week_meta(ta_name, week):
+    """Return week metadata or None."""
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM week_meta WHERE ta_name = ? AND week = ?",
+        (ta_name, week),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_early_submissions(ta_name, week):
+    """Return saved early submissions for a week."""
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT rank, student_name, problem, submission_time, time_taken "
+        "FROM early_submissions WHERE ta_name = ? AND week = ? ORDER BY rank",
+        (ta_name, week),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 def get_streak_history(ta_name, up_to_week):
@@ -123,9 +218,49 @@ def get_max_week(ta_name):
     return row[0] if row[0] is not None else 0
 
 
+def get_weeks_with_data(ta_name):
+    """Return a sorted list of week numbers that have stored data for a TA."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT week FROM week_results WHERE ta_name = ? ORDER BY week",
+        (ta_name,),
+    ).fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+
+def get_week_results(ta_name, week):
+    """Return stored student results for a specific week.
+
+    Returns a list of dicts with student_name, problem1_grade, problem2_grade,
+    full_mark, both_perfect.  Returns empty list if no data.
+    """
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT student_name, problem1_grade, problem2_grade, full_mark, both_perfect "
+        "FROM week_results WHERE ta_name = ? AND week = ? ORDER BY student_name",
+        (ta_name, week),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def delete_week_data(ta_name, week):
+    """Delete stored data for a single week for a TA."""
+    conn = _get_conn()
+    conn.execute("DELETE FROM week_results WHERE ta_name = ? AND week = ?", (ta_name, week))
+    conn.execute("DELETE FROM week_meta WHERE ta_name = ? AND week = ?", (ta_name, week))
+    conn.execute("DELETE FROM early_submissions WHERE ta_name = ? AND week = ?", (ta_name, week))
+    conn.commit()
+    conn.close()
+
+
 def reset_db(ta_name):
     """Delete all saved week results for a specific TA."""
     conn = _get_conn()
     conn.execute("DELETE FROM week_results WHERE ta_name = ?", (ta_name,))
+    conn.execute("DELETE FROM week_meta WHERE ta_name = ?", (ta_name,))
+    conn.execute("DELETE FROM early_submissions WHERE ta_name = ?", (ta_name,))
     conn.commit()
     conn.close()
