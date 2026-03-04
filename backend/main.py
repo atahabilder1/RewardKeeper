@@ -1,21 +1,27 @@
 import json
 import os
+from datetime import datetime
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from rewards import compute_rewards
+from prizeversity import PrizeversityClient
 from db import (
     init_db, save_week_results, get_streak_history, get_max_week, reset_db,
     get_weeks_with_data, get_week_results, delete_week_data,
     save_week_meta, save_early_submissions, get_week_meta, get_early_submissions,
+    save_pv_settings, get_pv_settings, delete_pv_settings,
+    save_student_mappings, get_student_mappings, delete_student_mappings,
+    save_reward_send_log, get_reward_send_log,
 )
 
 app = FastAPI(title="RewardKeeper API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -217,3 +223,276 @@ async def delete_week(ta_name: str = Form(...), week: int = Form(...)):
 async def reset(ta_name: str = Form(...)):
     reset_db(ta_name)
     return {"status": "ok", "message": f"All saved week data for {ta_name} has been cleared."}
+
+
+# --- Prizeversity Endpoints ---
+
+class PvSettingsBody(BaseModel):
+    ta_name: str
+    classroom_id: str
+    api_key: str = ""
+
+
+class MappingEntry(BaseModel):
+    rk_name: str
+    pv_student_id: str
+    pv_name: str
+
+
+class SaveMappingsBody(BaseModel):
+    ta_name: str
+    mappings: list[MappingEntry]
+
+
+class SyncStudentsBody(BaseModel):
+    ta_name: str
+
+
+class SendRewardsBody(BaseModel):
+    ta_name: str
+    week: int
+    dry_run: bool = True
+
+
+@app.post("/api/prizeversity/settings")
+async def pv_save_settings(body: PvSettingsBody):
+    """Save Prizeversity settings. Validates by calling get_classroom."""
+    api_key = body.api_key.strip()
+    classroom_id = body.classroom_id.strip()
+    client = PrizeversityClient(classroom_id, api_key)
+    try:
+        classroom = await client.get_classroom()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to connect to Prizeversity: {e}")
+    save_pv_settings(body.ta_name, api_key, classroom_id)
+    return {"status": "ok", "classroom": classroom}
+
+
+@app.get("/api/prizeversity/settings/{ta_name}")
+async def pv_get_settings(ta_name: str):
+    """Check if Prizeversity is configured. Never returns the api_key."""
+    settings = get_pv_settings(ta_name)
+    if not settings:
+        return {"configured": False}
+    return {
+        "configured": True,
+        "classroom_id": settings["classroom_id"],
+        "has_api_key": bool(settings["api_key"]),
+    }
+
+
+@app.post("/api/prizeversity/sync-students")
+async def pv_sync_students(body: SyncStudentsBody):
+    """Fetch PV students and auto-match against RK student names."""
+    settings = get_pv_settings(body.ta_name)
+    if not settings:
+        raise HTTPException(status_code=400, detail="Prizeversity not configured")
+
+    client = PrizeversityClient(settings["classroom_id"], settings["api_key"])
+
+    # Get all unique RK student names from week_results
+    max_week = get_max_week(body.ta_name)
+    rk_names = set()
+    for w in range(1, max_week + 1):
+        for row in get_week_results(body.ta_name, w):
+            rk_names.add(row["student_name"])
+    rk_names = sorted(rk_names)
+
+    # Fetch PV student list (for dropdown in unmatched cases)
+    pv_students = []
+    try:
+        pv_result = await client.list_students()
+        pv_students = pv_result.get("students", [])
+    except Exception:
+        pass
+
+    # Try PV's /users/match API first, fall back to local fuzzy matching
+    matched = []
+    unmatched = []
+    try:
+        match_result = await client.match_students_api(rk_names)
+        # Response: { matched: [{name, externalId, studentId, ...}], unmatched: [{name, externalId, reason}] }
+        for entry in match_result.get("matched", []):
+            matched.append({
+                "rk_name": entry.get("externalId", entry.get("name", "")),
+                "pv_student_id": entry.get("studentId", entry.get("_id", "")),
+                "pv_name": entry.get("name", ""),
+                "score": 1.0,
+            })
+        for entry in match_result.get("unmatched", []):
+            unmatched.append(entry.get("externalId", entry.get("name", "")))
+    except Exception:
+        # Fallback: use local fuzzy matching against the student list
+        if pv_students:
+            matched, unmatched = client.match_students_local(pv_students, rk_names)
+        else:
+            raise HTTPException(status_code=400, detail="Failed to match students via Prizeversity API")
+
+    # Also return existing saved mappings so the frontend can merge
+    saved = get_student_mappings(body.ta_name)
+
+    return {
+        "pv_students": pv_students,
+        "matched": matched,
+        "unmatched": unmatched,
+        "saved_mappings": saved,
+    }
+
+
+@app.post("/api/prizeversity/save-mappings")
+async def pv_save_mappings(body: SaveMappingsBody):
+    """Save manual student mappings."""
+    mappings = [m.model_dump() for m in body.mappings]
+    save_student_mappings(body.ta_name, mappings)
+    return {"status": "ok", "count": len(mappings)}
+
+
+@app.get("/api/prizeversity/mappings/{ta_name}")
+async def pv_get_mappings(ta_name: str):
+    """Get saved student mappings."""
+    mappings = get_student_mappings(ta_name)
+    return {"mappings": mappings}
+
+
+@app.post("/api/prizeversity/send-rewards")
+async def pv_send_rewards(body: SendRewardsBody):
+    """DRY RUN: Aggregate points per student, resolve mappings, return preview.
+    Does NOT call wallet/adjust."""
+    settings = get_pv_settings(body.ta_name)
+    if not settings:
+        raise HTTPException(status_code=400, detail="Prizeversity not configured")
+
+    # Get week results and meta
+    week_results = get_week_results(body.ta_name, body.week)
+    if not week_results:
+        raise HTTPException(status_code=400, detail=f"No data for week {body.week}")
+
+    meta = get_week_meta(body.ta_name, body.week)
+    reward_points = meta["reward_points"] if meta else 0
+
+    # Get early submissions
+    early = get_early_submissions(body.ta_name, body.week)
+    early_names = {e["student_name"] for e in early}
+
+    # Get streak data
+    streak_history = get_streak_history(body.ta_name, body.week)
+    MIN_STREAK_WEEKS = 4
+
+    # Aggregate points per student
+    student_points = {}
+    for r in week_results:
+        name = r["student_name"]
+        pts = 0
+        reasons = []
+
+        # Both full mark reward
+        if r["both_perfect"]:
+            pts += reward_points
+            reasons.append(f"Both Full Mark: {reward_points}")
+
+        # Early submission reward
+        if name in early_names:
+            pts += reward_points
+            reasons.append(f"Early Submission: {reward_points}")
+
+        # Streak reward
+        if body.week >= MIN_STREAK_WEEKS:
+            for s in streak_history:
+                if s["name"] == name and s["streak_length"] >= MIN_STREAK_WEEKS:
+                    streak_pts = reward_points * s["streak_length"]
+                    pts += streak_pts
+                    reasons.append(f"Streak ({s['streak_length']} weeks): {streak_pts}")
+                    break
+
+        if pts > 0:
+            student_points[name] = {"points": pts, "reasons": reasons}
+
+    # Resolve mappings
+    mappings = get_student_mappings(body.ta_name)
+    mapping_lookup = {m["rk_name"]: m for m in mappings}
+
+    preview = []
+    unmapped = []
+    total_bits = 0
+
+    for name, info in sorted(student_points.items()):
+        mapping = mapping_lookup.get(name)
+        if mapping:
+            preview.append({
+                "rk_name": name,
+                "pv_name": mapping["pv_name"],
+                "pv_student_id": mapping["pv_student_id"],
+                "points": info["points"],
+                "reasons": info["reasons"],
+            })
+            total_bits += info["points"]
+        else:
+            unmapped.append({
+                "rk_name": name,
+                "points": info["points"],
+                "reasons": info["reasons"],
+            })
+
+    # If dry_run, just return preview; if not, actually send bits
+    if body.dry_run:
+        save_reward_send_log(
+            body.ta_name, body.week, datetime.now().isoformat(),
+            len(preview), total_bits,
+            f"Week {body.week} rewards (preview)",
+            status="preview",
+        )
+        return {
+            "dry_run": True,
+            "week": body.week,
+            "reward_points": reward_points,
+            "preview": preview,
+            "unmapped": unmapped,
+            "total_students": len(preview),
+            "total_bits": total_bits,
+        }
+
+    # LIVE MODE: actually call wallet/adjust
+    if not preview:
+        raise HTTPException(status_code=400, detail="No mapped students to send rewards to")
+
+    client = PrizeversityClient(settings["classroom_id"], settings["api_key"])
+    updates = [{"studentId": p["pv_student_id"], "amount": p["points"]} for p in preview]
+    description = f"RewardKeeper Week {body.week} rewards"
+
+    try:
+        api_result = await client.adjust_wallet(updates, description)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send rewards: {e}")
+
+    save_reward_send_log(
+        body.ta_name, body.week, datetime.now().isoformat(),
+        len(preview), total_bits,
+        description,
+        status="sent",
+    )
+
+    return {
+        "dry_run": False,
+        "week": body.week,
+        "reward_points": reward_points,
+        "preview": preview,
+        "unmapped": unmapped,
+        "total_students": len(preview),
+        "total_bits": total_bits,
+        "api_result": api_result,
+    }
+
+
+@app.get("/api/prizeversity/send-status/{ta_name}/{week}")
+async def pv_send_status(ta_name: str, week: int):
+    """Check if rewards were 'sent' for a week."""
+    log = get_reward_send_log(ta_name, week)
+    if not log:
+        return {"sent": False}
+    return {
+        "sent": True,
+        "status": log["status"],
+        "sent_at": log["sent_at"],
+        "total_students": log["total_students"],
+        "total_bits": log["total_bits"],
+    }

@@ -17,9 +17,9 @@ export default function StreakTable({ streakData, week, totalWeeks = 12 }) {
 
   return (
     <div className="card streak-section">
-      <h2>Streak Tracker</h2>
+      <h2>Debug Dungeon Week {week} Streak Reward!</h2>
       <p className="table-subtitle">
-        Both problems must be full mark each week. Streak reward starts at week{" "}
+        Both problems must be full mark each week, including the current and last three weeks. Streak reward starts at week{" "}
         {minWeeks}.
       </p>
 

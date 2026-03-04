@@ -63,6 +63,42 @@ def init_db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prizeversity_settings (
+            ta_name TEXT PRIMARY KEY,
+            api_key TEXT NOT NULL,
+            classroom_id TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS student_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ta_name TEXT NOT NULL,
+            rk_name TEXT NOT NULL,
+            pv_student_id TEXT NOT NULL,
+            pv_name TEXT NOT NULL,
+            UNIQUE(ta_name, rk_name)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reward_send_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ta_name TEXT NOT NULL,
+            week INTEGER NOT NULL,
+            sent_at TEXT NOT NULL,
+            total_students INTEGER NOT NULL,
+            total_bits INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'dry_run',
+            UNIQUE(ta_name, week)
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -262,5 +298,92 @@ def reset_db(ta_name):
     conn.execute("DELETE FROM week_results WHERE ta_name = ?", (ta_name,))
     conn.execute("DELETE FROM week_meta WHERE ta_name = ?", (ta_name,))
     conn.execute("DELETE FROM early_submissions WHERE ta_name = ?", (ta_name,))
+    conn.execute("DELETE FROM reward_send_log WHERE ta_name = ?", (ta_name,))
     conn.commit()
     conn.close()
+
+
+# --- Prizeversity Settings CRUD ---
+
+def save_pv_settings(ta_name, api_key, classroom_id):
+    conn = _get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO prizeversity_settings (ta_name, api_key, classroom_id) VALUES (?, ?, ?)",
+        (ta_name, api_key, classroom_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_pv_settings(ta_name):
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM prizeversity_settings WHERE ta_name = ?", (ta_name,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_pv_settings(ta_name):
+    conn = _get_conn()
+    conn.execute("DELETE FROM prizeversity_settings WHERE ta_name = ?", (ta_name,))
+    conn.commit()
+    conn.close()
+
+
+# --- Student Mappings CRUD ---
+
+def save_student_mappings(ta_name, mappings):
+    """Save student mappings (list of dicts with rk_name, pv_student_id, pv_name)."""
+    conn = _get_conn()
+    for m in mappings:
+        conn.execute(
+            "INSERT OR REPLACE INTO student_mappings (ta_name, rk_name, pv_student_id, pv_name) VALUES (?, ?, ?, ?)",
+            (ta_name, m["rk_name"], m["pv_student_id"], m["pv_name"]),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_student_mappings(ta_name):
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT rk_name, pv_student_id, pv_name FROM student_mappings WHERE ta_name = ? ORDER BY rk_name",
+        (ta_name,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def delete_student_mappings(ta_name):
+    conn = _get_conn()
+    conn.execute("DELETE FROM student_mappings WHERE ta_name = ?", (ta_name,))
+    conn.commit()
+    conn.close()
+
+
+# --- Reward Send Log CRUD ---
+
+def save_reward_send_log(ta_name, week, sent_at, total_students, total_bits, description, status="dry_run"):
+    conn = _get_conn()
+    conn.execute(
+        """INSERT OR REPLACE INTO reward_send_log
+           (ta_name, week, sent_at, total_students, total_bits, description, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (ta_name, week, sent_at, total_students, total_bits, description, status),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_reward_send_log(ta_name, week):
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM reward_send_log WHERE ta_name = ? AND week = ?",
+        (ta_name, week),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None

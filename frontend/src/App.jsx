@@ -5,6 +5,8 @@ import UploadForm from "./components/UploadForm.jsx";
 import ResultsTable from "./components/ResultsTable.jsx";
 import Summary from "./components/Summary.jsx";
 import StreakTable from "./components/StreakTable.jsx";
+import PrizeversitySettings from "./components/PrizeversitySettings.jsx";
+import SendRewardsButton from "./components/SendRewardsButton.jsx";
 import { downloadCSV } from "./utils/exportReport.js";
 
 const API = "http://localhost:8000/api";
@@ -14,6 +16,7 @@ export default function App() {
   const [courseInfo, setCourseInfo] = useState(() => localStorage.getItem("courseInfo") || "");
   const [displayName, setDisplayName] = useState(() => localStorage.getItem("displayName") || "");
   const [showLogin, setShowLogin] = useState(false);
+  const [showPvSettings, setShowPvSettings] = useState(false);
   const [file1, setFile1] = useState(null);
   const [file2, setFile2] = useState(null);
   const [week, setWeek] = useState(1);
@@ -261,6 +264,7 @@ export default function App() {
                   <div className="header-user-top">
                     {displayName && <span className="ta-name">{displayName}</span>}
                     <span className="ta-badge">CRN: {taName}</span>
+                    <button className="logout-btn pv-settings-btn" onClick={() => setShowPvSettings(true)}>Settings</button>
                     <button className="logout-btn" onClick={handleLogout}>Logout</button>
                   </div>
                   {courseInfo && <span className="course-info">{courseInfo}</span>}
@@ -276,6 +280,10 @@ export default function App() {
       <div className="container">
         {showLogin && !taName && (
           <Login onLogin={handleLogin} onCancel={() => setShowLogin(false)} />
+        )}
+
+        {showPvSettings && taName && (
+          <PrizeversitySettings taName={taName} onClose={() => setShowPvSettings(false)} />
         )}
 
         <Rubric rewardGroups={rewardGroups} onGroupsChange={setRewardGroups} totalWeeks={totalWeeks} />
@@ -361,6 +369,11 @@ export default function App() {
             >
               Download CSV
             </button>
+            <SendRewardsButton
+              taName={taName}
+              week={displayData.dungeon_week}
+              hasData={true}
+            />
           </div>
         )}
       </div>
