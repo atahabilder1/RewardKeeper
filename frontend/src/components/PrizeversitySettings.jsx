@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import StudentMapping from "./StudentMapping.jsx";
 
-const API = "http://localhost:8000/api";
+const API = import.meta.env.VITE_API_URL || "/api";
 
 export default function PrizeversitySettings({ taName, onClose }) {
   const [classroomId, setClassroomId] = useState("");
@@ -75,9 +75,10 @@ export default function PrizeversitySettings({ taName, onClose }) {
                 type="text"
                 value={classroomId}
                 onChange={(e) => setClassroomId(e.target.value)}
-                placeholder="e.g. 64a1b2c3d4e5f6..."
+                placeholder="e.g. 696166712daecebcbe86558c"
                 required
               />
+              <span className="pv-hint">Found in your Prizeversity URL: prizeversity.com/classroom/<strong>your-id-here</strong></span>
             </div>
             <div className="form-group">
               <label htmlFor="pv-apikey">API Key <span className="optional-label">(X-API-Key header)</span></label>
@@ -89,7 +90,7 @@ export default function PrizeversitySettings({ taName, onClose }) {
                 placeholder="pvk_..."
                 required
               />
-              <span className="pv-hint">Created by your professor from Integrations settings page</span>
+              <span className="pv-hint">Provided by your course instructor (Prof. Hadi Nasser) from the Prizeversity Integrations settings page</span>
             </div>
 
             {error && <div className="login-error">{error}</div>}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-const REGISTER_URL = "http://localhost:8000/api/register";
+const API = import.meta.env.VITE_API_URL || "/api";
+const REGISTER_URL = `${API}/register`;
 
 export default function Register({ onRegister, onCancel, onSwitchToLogin }) {
   const [crn, setCrn] = useState("");

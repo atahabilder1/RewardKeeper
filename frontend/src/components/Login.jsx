@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-const LOGIN_URL = "http://localhost:8000/api/login";
+const API = import.meta.env.VITE_API_URL || "/api";
+const LOGIN_URL = `${API}/login`;
 
 export default function Login({ onLogin, onCancel, onSwitchToRegister }) {
   const [crn, setCrn] = useState("");

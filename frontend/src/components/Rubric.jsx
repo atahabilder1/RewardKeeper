@@ -55,6 +55,7 @@ export default function Rubric({ rewardGroups, onGroupsChange, totalWeeks }) {
         etc.
       </p>
 
+      <div className="rubric-table-wrapper">
       <table className="rubric-table">
         <thead>
           <tr>
@@ -125,6 +126,7 @@ export default function Rubric({ rewardGroups, onGroupsChange, totalWeeks }) {
           </tr>
         </tbody>
       </table>
+      </div>
 
       <p>
         For labs, a student can earn bits in the Debug Dungeons in the following

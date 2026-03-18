@@ -10,12 +10,13 @@ import PrizeversitySettings from "./components/PrizeversitySettings.jsx";
 import SendRewardsButton from "./components/SendRewardsButton.jsx";
 import { downloadCSV } from "./utils/exportReport.js";
 
-const API = "http://localhost:8000/api";
+const API = import.meta.env.VITE_API_URL || "/api";
 
 export default function App() {
   const [taName, setTaName] = useState(() => localStorage.getItem("taName"));
   const [courseInfo, setCourseInfo] = useState(() => localStorage.getItem("courseInfo") || "");
   const [displayName, setDisplayName] = useState(() => localStorage.getItem("displayName") || "");
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark");
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showPvSettings, setShowPvSettings] = useState(false);
@@ -84,6 +85,14 @@ export default function App() {
       // silently ignore
     }
   };
+
+  // Sync theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   // On mount, if already logged in, fetch everything
   useEffect(() => {
@@ -258,8 +267,13 @@ export default function App() {
       <header className="app-header">
         <div className="header-content">
           <div className="header-top">
-            <p className="header-subtitle">Debug Dungeon Reward Calculator</p>
-            <h1 className="logo"><span className="logo-icon">🏆</span> DDDaemon <span className="logo-icon">🎮</span></h1>
+            <div className="header-left">
+              <p className="header-subtitle">Debug Dungeon Reward Calculator</p>
+              <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+                {theme === "dark" ? "Light" : "Dark"}
+              </button>
+            </div>
+            <h1 className="logo"><img src="/logo.jpeg" alt="DDDaemon" className="logo-img" /> DDDaemon</h1>
             <div className="header-user">
               {taName ? (
                 <>
