@@ -1323,3 +1323,106 @@ tbody td {
   font-size: 0.85rem;
   font-weight: 500;
 }
+
+
+/* Mobile responsiveness , can add it to its own css file but will add it here in the app.csx  */
+
+@media (max-width: 768px) {
+
+  /* overall padding and width */
+
+  .container{
+    padding: 1rem 1rem;
+  }
+
+  body {
+    font-size: 14px;
+  }
+
+/* Header: stack instead of a 3 column grid */
+.header-top {
+  grid-template-columns: 1fr;
+  row-gap: 0.75rem;
+  justify-items: center;
+  text-align: center;
+
+}
+
+.header-left{
+  justify-content: center;
+
+}
+
+.header-user{
+  align-items: center;
+}
+
+.header-user-top {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+}
+
+.logo-img {
+
+  height: 1.4rem;
+}
+
+.course-info {
+  text-align: center;
+
+}
+
+/* summary cards: stacking vertically */
+
+.summary-stats{
+  flex-direction: column;
+  align-items: stretch;
+}
+
+button[type="submit"],
+.reset-btn,
+.delete-week-btn,
+.pv-sync-btn,
+.pv-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Making the tables horizontal scroll for the 768 screen size & lower */
+.results-table,
+.streak-table-wrapper,
+.rubric-table-wrapper,
+.pv-preview-table-wrapper {
+  overflow-x: auto;
+}
+
+table, 
+.rubric-table,
+.streak-grid,
+.pv-preview-table {
+  min-width: 500px;
+}
+
+/*  login and model cards */
+.login-card,
+.register-card,
+.pv-settings-card,
+.pv-mapping-card {
+  margin: 0 1rem;
+  padding: 1.5rem 1.25rem;
+}
+
+/* donwload button space adjusting */
+
+.download-buttons {
+  gap: 0.5rem;
+}
+
+
+
+}
+
